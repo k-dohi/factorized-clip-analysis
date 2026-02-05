@@ -233,13 +233,6 @@ class VariationSpecificPromptEvaluator:
             score = self.compute_score(pil_img, object_class, variation_suffix)
             neg_n_scores.append(score)
         
-        # Negative=A: real anomaly test images
-        neg_a_scores = []
-        for _, img, _ in real_anomaly_data:
-            pil_img = Image.fromarray(img)
-            score = self.compute_score(pil_img, object_class, variation_suffix)
-            neg_a_scores.append(score)
-        
         # Compute AUROCs
         results = {}
         
@@ -247,6 +240,17 @@ class VariationSpecificPromptEvaluator:
         if len(neg_n_scores) > 0:
             auroc_n = compute_auroc(neg_n_scores, positive_scores)
             results['neg_n'] = auroc_n * 100
+
+        # Paper protocol: omit Object category for Neg=N+A and Neg=A
+        if category == 'object':
+            return results
+
+        # Negative=A: real anomaly test images
+        neg_a_scores = []
+        for _, img, _ in real_anomaly_data:
+            pil_img = Image.fromarray(img)
+            score = self.compute_score(pil_img, object_class, variation_suffix)
+            neg_a_scores.append(score)
         
         # Neg=N+A
         if len(neg_n_scores) > 0 and len(neg_a_scores) > 0:
@@ -339,33 +343,47 @@ def print_results_table(results: Dict):
         cat_neg_a = []
         
         for var_type, scores in variations.items():
-            neg_n = scores.get('neg_n', float('nan'))
-            neg_na = scores.get('neg_na', float('nan'))
-            neg_a = scores.get('neg_a', float('nan'))
+            neg_n = scores.get('neg_n')
+            neg_na = scores.get('neg_na')
+            neg_a = scores.get('neg_a')
+
+            def fmt(v):
+                return f"{v:>8.1f}%" if v is not None else f"{'---':>9}"
+
+            print(f"{category:<12} {var_type:<20} {fmt(neg_n)}  {fmt(neg_na)}  {fmt(neg_a)}")
             
-            print(f"{category:<12} {var_type:<20} {neg_n:>8.1f}%  {neg_na:>8.1f}%  {neg_a:>8.1f}%")
-            
-            if not np.isnan(neg_n):
+            if neg_n is not None:
                 cat_neg_n.append(neg_n)
                 overall_neg_n.append(neg_n)
-            if not np.isnan(neg_na):
+            if neg_na is not None:
                 cat_neg_na.append(neg_na)
                 overall_neg_na.append(neg_na)
-            if not np.isnan(neg_a):
+            if neg_a is not None:
                 cat_neg_a.append(neg_a)
                 overall_neg_a.append(neg_a)
         
         # Category average
         if cat_neg_n:
             avg_n = np.mean(cat_neg_n)
-            avg_na = np.mean(cat_neg_na) if cat_neg_na else float('nan')
-            avg_a = np.mean(cat_neg_a) if cat_neg_a else float('nan')
-            print(f"{'':12} {'Category Avg':<20} {avg_n:>8.1f}%  {avg_na:>8.1f}%  {avg_a:>8.1f}%")
+            avg_na = np.mean(cat_neg_na) if cat_neg_na else None
+            avg_a = np.mean(cat_neg_a) if cat_neg_a else None
+
+            def fmt(v):
+                return f"{v:>8.1f}%" if v is not None else f"{'---':>9}"
+
+            print(f"{'':12} {'Category Avg':<20} {fmt(avg_n)}  {fmt(avg_na)}  {fmt(avg_a)}")
         print("-"*70)
     
     # Overall average
     if overall_neg_n:
-        print(f"{'OVERALL':<12} {'Average':<20} {np.mean(overall_neg_n):>8.1f}%  {np.mean(overall_neg_na):>8.1f}%  {np.mean(overall_neg_a):>8.1f}%")
+        overall_n = np.mean(overall_neg_n)
+        overall_na = np.mean(overall_neg_na) if overall_neg_na else None
+        overall_a = np.mean(overall_neg_a) if overall_neg_a else None
+
+        def fmt(v):
+            return f"{v:>8.1f}%" if v is not None else f"{'---':>9}"
+
+        print(f"{'OVERALL':<12} {'Average':<20} {fmt(overall_n)}  {fmt(overall_na)}  {fmt(overall_a)}")
     print("="*70)
 
 
